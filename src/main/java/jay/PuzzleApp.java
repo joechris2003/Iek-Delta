@@ -1,4 +1,4 @@
-package eponymo;
+package jay;
 
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;

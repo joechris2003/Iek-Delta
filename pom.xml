@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>eponymo</groupId>
+    <groupId>jay</groupId>
     <artifactId>math-puzzle</artifactId>
     <version>1.0</version>
 
@@ -29,7 +29,7 @@
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.8</version>
                 <configuration>
-                    <mainClass>eponymo.PuzzleApp</mainClass>
+                    <mainClass>jay.PuzzleApp</mainClass>
                 </configuration>
             </plugin>
         </plugins>

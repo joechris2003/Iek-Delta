@@ -1,4 +1,4 @@
-package eponymo;
+package jay;
 
 import java.util.Random;
 
