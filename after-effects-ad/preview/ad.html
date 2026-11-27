@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="el"><head><meta charset="utf-8"><title>PULSE X1 preview</title>
+<style>html,body{margin:0;background:#000}canvas{display:block}</style></head>
+<body><canvas id="c" width="1080" height="1920"></canvas>
+<script>
+// Προεπισκόπηση της διαφήμισης PULSE X1 σε canvas (ίδια σκηνές/χρόνοι με το .jsx του After Effects)
+const cv = document.getElementById('c');
+const main = cv.getContext('2d');
+let ctx = main;
+const W = 1080, H = 1920;
+const oc = document.createElement('canvas'); oc.width = W; oc.height = H; const octx = oc.getContext('2d');
+const tc = document.createElement('canvas'); tc.width = W; tc.height = H; const tctx = tc.getContext('2d');
+
+const C = { bg:[8,10,26], navy:[18,23,56], cyan:[26,217,255], mag:[255,46,140], lime:[184,255,56],
+            white:[255,255,255], card:[20,26,54], grey:[179,191,230] };
+const rgba = (c, a = 1) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${a})`;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const pr = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
+const ease = x => x < .5 ? 2*x*x : 1 - Math.pow(-2*x + 2, 2) / 2;
+const easeOut = x => 1 - Math.pow(1 - x, 3);
+const back = x => { const c1 = 1.70158 * 1.2, c3 = c1 + 1; return 1 + c3*Math.pow(x-1,3) + c1*Math.pow(x-1,2); };
+const lin = x => x;
+function kf(t, keys, fn = ease) {
+  if (t <= keys[0][0]) return keys[0][1];
+  for (let i = 1; i < keys.length; i++) {
+    if (t <= keys[i][0]) {
+      const [t0, v0] = keys[i-1], [t1, v1] = keys[i];
+      const p = fn(clamp((t - t0) / (t1 - t0), 0, 1));
+      return Array.isArray(v0) ? v0.map((x, j) => x + (v1[j] - x) * p) : v0 + (v1 - v0) * p;
+    }
+  }
+  return keys[keys.length-1][1];
+}
+let NOW = 0;
+const beat = t => Math.pow(Math.abs(Math.cos(t * Math.PI * 2)), 10);
+
+// ---------- κείμενο (εμφάνιση ανά χαρακτήρα)
+function T(str, x, y, size, col, o = {}) {
+  const lines = str.split('\n'), lh = size * 1.25;
+  ctx.save();
+  const base = ctx.globalAlpha;
+  const a = o.a === undefined ? 1 : o.a;
+  if (a <= 0.001) { ctx.restore(); return; }
+  ctx.font = `${o.reg ? '' : 'bold '}${size}px "Liberation Sans"`;
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  if (o.glow) { ctx.shadowColor = rgba(o.glowCol || col, .9); ctx.shadowBlur = o.glow; }
+  ctx.fillStyle = rgba(col);
+  lines.forEach((ln, li) => {
+    const ly = y + (li - (lines.length - 1) / 2) * lh;
+    const chars = [...ln];
+    const ws = chars.map(c => ctx.measureText(c).width);
+    const tot = ws.reduce((s, v) => s + v, 0);
+    let cx = x - tot / 2;
+    chars.forEach((ch, i) => {
+      let ca = a, dy = 0;
+      if (o.rev) {
+        const rp = pr(NOW, o.rev[0], o.rev[1]);
+        const c = clamp((rp * (chars.length + 3) - i) / 3, 0, 1);
+        ca = a * c; dy = (1 - easeOut(c)) * (o.yoff === undefined ? 60 : o.yoff);
+      }
+      if (ca > 0.001) { ctx.globalAlpha = base * ca; ctx.fillText(ch, cx, ly + dy); }
+      cx += ws[i];
+    });
+  });
+  ctx.restore();
+}
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x - w/2, y - h/2, w, h, r); }
+function glowOn(col, b) { ctx.shadowColor = rgba(col, .9); ctx.shadowBlur = b; }
+function pathPts(pts, a, b) {
+  const L = [0];
+  for (let i = 1; i < pts.length; i++) L.push(L[i-1] + Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]));
+  const tot = L[L.length-1], s = a * tot, e = b * tot;
+  ctx.beginPath(); let started = false;
+  for (let i = 1; i < pts.length; i++) {
+    const l0 = L[i-1], l1 = L[i], lo = Math.max(s, l0), hi = Math.min(e, l1);
+    if (hi <= lo) continue;
+    const f0 = (lo - l0) / (l1 - l0), f1 = (hi - l0) / (l1 - l0);
+    const p0 = pts[i-1], p1 = pts[i];
+    const x0 = p0[0] + (p1[0]-p0[0])*f0, y0 = p0[1] + (p1[1]-p0[1])*f0;
+    const x1 = p0[0] + (p1[0]-p0[0])*f1, y1 = p0[1] + (p1[1]-p0[1])*f1;
+    if (!started) { ctx.moveTo(x0, y0); started = true; }
+    ctx.lineTo(x1, y1);
+  }
+}
+function star(cx, cy, n, ro, ri, rot) {
+  ctx.beginPath();
+  for (let i = 0; i < n * 2; i++) {
+    const r = i % 2 ? ri : ro, a = rot + i * Math.PI / n;
+    const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.closePath();
+}
+
+// ---------- σωματίδια
+let seed = 20241127;
+const rnd = () => (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+const parts = [];
+for (let i = 0; i < 46; i++) {
+  const q = rnd();
+  parts.push({ sz: 6 + rnd()*16, col: q < .45 ? C.cyan : (q < .8 ? C.mag : C.white), a: .25 + rnd()*.55,
+               x: rnd()*W, y0: rnd()*2000, sp: 40 + rnd()*90, amp: 10 + rnd()*40, f: .6 + rnd()*1.4, ph: rnd()*6 });
+}
+
+// ---------- ECG
+const ECG = [[-540,0],[-300,0],[-230,0],[-190,-90],[-130,160],[-70,-260],[0,230],[60,-60],[110,0],[260,0],[300,0],[330,-60],[370,70],[410,0],[540,0]];
+
+// ---------- ρολόι
+function drawWatch(t) {
+  const sc = kf(t, [[4,0],[4.9,.85],[12,.85],[12.9,.46],[22,.46],[22.9,.50],[28,.50],[28.9,.75]], back);
+  const py = kf(t, [[4,960],[12,960],[12.9,620],[22,620],[22.9,1410],[28,1410],[28.9,930]], back);
+  const cam = kf(t, [[4,1],[12,1.07],[22,1.056],[28,1.027],[32,1.128]]);
+  const ry = kf(t, [[4,90],[4.9,0],[22,0],[22.9,360],[32,360]]) + Math.sin(t*1.1)*14;
+  const cx = Math.cos(ry * Math.PI / 180);
+  if (sc < .01 || Math.abs(cx) < .04) return;
+  ctx.save();
+  ctx.translate(540, py);
+  ctx.scale(sc * cam * cx, sc * cam);
+  ctx.rotate(Math.sin(t*.8) * 0.015);
+  // halos
+  ctx.save(); ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.globalAlpha = .6;
+  glowOn(C.cyan, 20); ctx.strokeStyle = rgba(C.cyan); ctx.setLineDash([40, 60]);
+  ctx.rotate(t * 22 * Math.PI / 180); ctx.beginPath(); ctx.arc(0, 0, 450, 0, 7); ctx.stroke();
+  ctx.rotate(-t * 22 * Math.PI / 180);
+  glowOn(C.mag, 20); ctx.strokeStyle = rgba(C.mag); ctx.setLineDash([18, 27]);
+  ctx.rotate(-t * 14 * Math.PI / 180); ctx.beginPath(); ctx.arc(0, 0, 520, 0, 7); ctx.stroke();
+  ctx.restore();
+  // λουριά
+  ctx.fillStyle = rgba([33,38,69]);
+  rr(0, -340, 250, 330, 50); ctx.fill();
+  rr(0, 340, 250, 330, 50); ctx.fill();
+  ctx.fillStyle = rgba(C.bg);
+  for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(0, 250 + 60*i, 11, 0, 7); ctx.fill(); }
+  // κουμπιά
+  ctx.fillStyle = rgba(C.mag); rr(226, -70, 30, 110, 12); ctx.fill();
+  ctx.fillStyle = rgba([77,87,140]); rr(224, 80, 22, 70, 10); ctx.fill();
+  // σώμα
+  ctx.save(); glowOn(C.cyan, 25);
+  ctx.fillStyle = rgba([41,46,77]); ctx.strokeStyle = rgba(C.cyan); ctx.lineWidth = 6;
+  rr(0, 0, 420, 500, 120); ctx.fill(); ctx.stroke(); ctx.restore();
+  // οθόνη
+  ctx.fillStyle = rgba([3,3,8]); rr(0, 0, 360, 440, 95); ctx.fill();
+  ctx.save(); rr(0, 0, 360, 440, 95); ctx.clip();
+  // δακτύλιος
+  ctx.lineWidth = 24; ctx.strokeStyle = rgba([43,48,82]);
+  ctx.beginPath(); ctx.arc(0, 20, 120, 0, 7); ctx.stroke();
+  const pg = ease(pr(t, 6, 9));
+  if (pg > 0) {
+    ctx.save(); glowOn(C.mag, 25); ctx.strokeStyle = rgba(C.mag); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(0, 20, 120, -Math.PI/2, -Math.PI/2 + Math.PI*2*.82*pg); ctx.stroke(); ctx.restore();
+  }
+  T(Math.round(82 * pg) + '%', 0, 20, 76, C.white);
+  T('10:09', 0, -150, 84, C.white);
+  T('BPM ' + Math.round(72 + 4*Math.sin(t*2*Math.PI*1.2)), 0, 185, 34, C.mag, { a: .75 + .25*beat(t) });
+  if (t >= 5.5) {
+    const gx = -400 + 800 * (((t - 5.5) % 1.5) / 1.5);
+    ctx.globalAlpha = .35; ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = '#fff';
+    ctx.translate(gx, 0); ctx.rotate(25 * Math.PI / 180); ctx.fillRect(-45, -350, 90, 700);
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+// ---------- κάρτες
+function card(i, y, t0, t1, accent, big, small, kind, t) {
+  if (t < t0 || t > t1) return;
+  const exitStart = t1 - .6 + i * .1;
+  const x = kf(t, [[t0,1500],[t0+.7,540],[exitStart,540],[t1,-600]], back);
+  ctx.save(); ctx.translate(x, y);
+  ctx.save(); glowOn(accent, 15);
+  ctx.fillStyle = rgba(C.card); ctx.strokeStyle = rgba(accent); ctx.lineWidth = 4;
+  rr(0, 0, 920, 220, 50); ctx.fill(); ctx.stroke(); ctx.restore();
+  // εικονίδιο
+  ctx.save(); ctx.translate(-340, 0); ctx.strokeStyle = rgba(accent); ctx.fillStyle = rgba(accent);
+  ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (kind === 'battery') {
+    rr(0, 0, 120, 66, 14); ctx.stroke(); rr(68, 0, 12, 26, 4); ctx.fill();
+    const w = 2 + 98 * ease(pr(t, t0+.6, t0+2));
+    ctx.beginPath(); ctx.roundRect(-50, -22, w, 44, 6); ctx.fill();
+  } else if (kind === 'ecg') {
+    const p = clamp(((t - t0 - .5) % 1.7) / 1.0, 0, 1);
+    pathPts([[-65,0],[-30,0],[-14,-44],[8,44],[24,-10],[34,0],[65,0]], 0, t > t0+.5 ? p : 0); ctx.stroke();
+  } else {
+    ctx.translate(0, Math.sin(t*3)*6);
+    ctx.beginPath(); ctx.arc(0, 16, 39, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0,-62); ctx.lineTo(32,0); ctx.lineTo(-32,0); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+  T(big, 105, -38, 78, C.white, { rev: [t0+.5, t0+1.3], yoff: 50 });
+  // wipe για το μικρό κείμενο
+  ctx.save();
+  const wp = ease(pr(t, t0+.9, t0+1.7));
+  ctx.beginPath(); ctx.rect(105 - 330, 20, 660 * wp, 70); ctx.clip();
+  T(small, 105, 52, 38, C.grey, { reg: true });
+  ctx.restore();
+  ctx.restore();
+}
+
+// ---------- λογότυπο
+function logo(t) {
+  const u = t - 28;
+  const oy = 110;
+  ctx.save();
+  ctx.globalAlpha = 1 - pr(t, 31.6, 32);
+  // ECG
+  ctx.save(); ctx.translate(540, oy + 70); ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  glowOn(C.mag, 30); ctx.strokeStyle = rgba(C.mag);
+  pathPts([[-330,0],[-150,0],[-100,-50],[-60,60],[-10,-90],[40,80],[80,0],[330,0]], 0, ease(pr(u, .2, 1.3)));
+  ctx.stroke(); ctx.restore();
+  ctx.font = 'bold 165px "Liberation Sans"';
+  const wa = ctx.measureText('PULSE').width, wb = ctx.measureText('X1').width, tot = wa + wb + 30;
+  const xa = 540 - tot/2 + wa/2, xb = 540 + tot/2 - wb/2;
+  const k = back(pr(u, .3, 1.1)), al = pr(u, .3, .7);
+  T('PULSE', xa - 700 * (1 - k), oy + 250, 165, C.white, { a: al });
+  T('X1', xb + 700 * (1 - k), oy + 250, 165, C.cyan, { a: al, glow: 40 });
+  T('ΑΚΟΥΣΕ ΤΗΝ ΚΑΡΔΙΑ ΣΟΥ', 540, oy + 390, 46, C.cyan, { reg: true, rev: [29, 30], yoff: 30 });
+  ctx.restore();
+}
+
+// ---------- κύριο render
+function render(t) {
+  NOW = t; ctx = main;
+  main.setTransform(1,0,0,1,0,0); main.globalAlpha = 1; main.globalCompositeOperation = 'source-over';
+  main.filter = 'none'; main.shadowBlur = 0; main.setLineDash([]);
+  // φόντο
+  const top = kf(t, [[0,C.navy],[4,[26,18,71]],[12,C.navy],[22,[77,10,56]],[26,[20,26,77]]]);
+  const g = main.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, rgba(top)); g.addColorStop(1, rgba(C.bg));
+  main.fillStyle = g; main.fillRect(0, 0, W, H);
+  // κινούμενο πλέγμα
+  main.save(); main.globalAlpha = .07; main.fillStyle = '#fff';
+  const gx = (t*30) % 80, gy = (t*50) % 80;
+  for (let x = -80; x < W + 80; x += 80) main.fillRect(x + gx, 0, 2, H);
+  for (let y = -80; y < H + 80; y += 80) main.fillRect(0, y + gy, W, 2);
+  main.restore();
+  // σωματίδια
+  main.save(); main.globalCompositeOperation = 'lighter';
+  for (const p of parts) {
+    const y = (((p.y0 - t*p.sp) % 2100) + 2100) % 2100 - 100;
+    const x = p.x + Math.sin(t*p.f + p.ph) * p.amp;
+    main.globalAlpha = p.a * .85; main.shadowColor = rgba(p.col); main.shadowBlur = 20;
+    main.fillStyle = rgba(p.col); main.beginPath(); main.arc(x, y, p.sz/2, 0, 7); main.fill();
+  }
+  main.restore();
+
+  // ===== ΣΚΗΝΗ 1
+  if (t < 4.2) {
+    const fo = 1 - pr(t, 3.5, 3.95);
+    main.save(); main.globalAlpha = fo;
+    for (const [d, col] of [[0, C.cyan],[.55, C.mag],[1.1, C.cyan]]) {
+      if (t < d) continue;
+      const p = ((t - d) % 1.6) / 1.6;
+      main.save(); main.strokeStyle = rgba(col); main.lineWidth = 8; main.globalAlpha = fo * .9 * (1 - p);
+      main.beginPath(); main.arc(540, 960, 130 * (.2 + 2.8 * ease(p)), 0, 7); main.stroke(); main.restore();
+    }
+    main.save(); glowOn(C.mag, 50); main.fillStyle = rgba(C.mag);
+    main.beginPath(); main.arc(540, 960, 45 * (1 + .25*beat(t)), 0, 7); main.fill(); main.restore();
+    main.save(); main.translate(540, 960); main.lineWidth = 14; main.lineCap = 'round'; main.lineJoin = 'round';
+    glowOn(C.mag, 40); main.strokeStyle = rgba(C.mag);
+    pathPts(ECG, ease(pr(t, 3.2, 3.9)), ease(pr(t, .3, 1.7))); main.stroke(); main.restore();
+    T('ΑΝ Η ΚΑΡΔΙΑ ΣΟΥ', 540, 520, 84, C.white, { rev: [.2, 1.2] });
+    T('ΜΙΛΟΥΣΕ...', 540, 665, 140, C.cyan, { rev: [.9, 2.0], glow: 35 });
+    T('ΘΑ ΤΗΝ ΑΚΟΥΣΕΣ;', 540, 1330, 78, C.mag, { rev: [2.0, 3.0] });
+    main.restore();
+  }
+
+  // ===== ΜΠΟΥΡΣΤ ΠΡΟΣΦΟΡΑΣ (πίσω από το ρολόι)
+  if (t >= 22.2 && t <= 28.3) {
+    const s = kf(t, [[22.2,0],[23,1],[27.6,1],[28.3,1.6]], back);
+    main.save(); main.translate(540, 610); main.scale(s * (1 + .03*beat(t)), s * (1 + .03*beat(t)));
+    main.globalAlpha = 1 - pr(t, 27.6, 28.3);
+    main.fillStyle = rgba(C.mag, .22); star(0, 0, 14, 1100, 520, t * 12 * Math.PI/180); main.fill();
+    main.fillStyle = rgba(C.cyan, .14); star(0, 0, 10, 1100, 520, -t * 8 * Math.PI/180); main.fill();
+    main.restore();
+  }
+
+  // ===== ΡΟΛΟΙ
+  if (t >= 4) drawWatch(t);
+
+  // ===== ΣΚΗΝΗ 2
+  if (t >= 4.3 && t <= 12.3) {
+    const fo = 1 - pr(t, 11.7, 12.2);
+    main.save(); main.globalAlpha = fo;
+    ctx = main;
+    T('PULSE X1', 540, 330, 150, [209,242,255], { rev: [4.5, 5.6], yoff: 90, glow: 30 });
+    // λάμψη μέσα στα γράμματα
+    for (const [a, b] of [[6.0, 6.9],[8.6, 9.5]]) {
+      if (t < a || t > b) continue;
+      octx.setTransform(1,0,0,1,0,0); octx.globalCompositeOperation = 'source-over'; octx.clearRect(0,0,W,H);
+      octx.globalAlpha = 1;
+      ctx = octx; T('PULSE X1', 540, 330, 150, C.white, { rev: [4.5, 5.6], yoff: 90 }); ctx = main;
+      octx.globalCompositeOperation = 'source-atop'; octx.fillStyle = '#fff';
+      octx.save(); octx.translate(-200 + 1500 * ease(pr(t, a, b)), 330); octx.rotate(20*Math.PI/180);
+      octx.fillRect(-60, -350, 120, 700); octx.restore();
+      main.save(); main.globalCompositeOperation = 'lighter'; main.drawImage(oc, 0, 0); main.restore();
+    }
+    T('Το έξυπνο ρολόι που ακούει\nτην καρδιά σου', 540, 470, 52, C.white, { reg: true, rev: [5.4, 6.6], yoff: 40 });
+    T('ΣΧΕΔΙΑΣΜΕΝΟ ΓΙΑ ΝΑ ΣΕ ΑΚΟΛΟΥΘΕΙ', 540, 1585, 40, C.lime, { rev: [7.5, 8.8], yoff: 40 });
+    main.restore();
+  }
+
+  // ===== ΣΚΗΝΗ 3
+  if (t >= 12.3 && t <= 22.3) {
+    main.save(); main.globalAlpha = 1 - pr(t, 21.6, 22.1);
+    T('ΓΙΑΤΙ PULSE X1;', 540, 300, 72, C.white, { rev: [12.4, 13.2] });
+    main.restore();
+    card(1, 1020, 13.0, 22.2, C.lime, '7 ΗΜΕΡΕΣ', 'αυτονομία μπαταρίας', 'battery', t);
+    card(2, 1260, 15.5, 22.2, C.mag, '24/7 ΚΑΡΔΙΑ', 'συνεχής παρακολούθηση ρυθμού', 'ecg', t);
+    card(3, 1500, 18.0, 22.2, C.cyan, '50 ΜΕΤΡΑ', 'αδιάβροχο για κολύμπι', 'drop', t);
+  }
+
+  // ===== ΣΚΗΝΗ 4
+  if (t >= 22.3 && t <= 28.3) {
+    main.save(); main.globalAlpha = 1 - pr(t, 27.8, 28.2);
+    T('ΠΡΟΣΦΟΡΑ ΕΚΙΝΗΣΗΣ', 540, 330, 70, C.white, { rev: [22.4, 23.3] });
+    const ps = back(pr(t, 22.9, 23.7));
+    if (t >= 22.9) {
+      main.save(); main.translate(540, 620); main.scale(ps, ps);
+      const v = Math.round(30 * ease(pr(t, 23.0, 24.4)));
+      T('-' + v + '%', 0, 0, 300, C.white, { glow: 40 }); main.restore();
+    }
+    if (t >= 24) {
+      T('€299', 540, 830, 80, C.grey, { a: pr(t, 24.0, 24.5) });
+      const sw = 250 * ease(pr(t, 24.6, 25.1));
+      main.save(); main.translate(415, 830); main.rotate(-7*Math.PI/180);
+      main.fillStyle = rgba(C.mag); main.fillRect(0, -4.5, sw, 9); main.restore();
+    }
+    if (t >= 24.3) {
+      const ns = back(pr(t, 24.3, 25.0));
+      main.save(); main.translate(540, 975); main.scale(ns, ns);
+      const v = Math.round(299 - 90 * ease(pr(t, 24.4, 25.9)));
+      T('€' + v, 0, 0, 190, C.lime, { glow: 35 }); main.restore();
+    }
+    if (t >= 25) {
+      const cs = back(pr(t, 25.0, 25.7));
+      main.save(); main.translate(540, 1115); main.scale(cs, cs);
+      main.fillStyle = rgba(C.card); main.strokeStyle = rgba(C.cyan); main.lineWidth = 3;
+      rr(0, 0, 820, 100, 50); main.fill(); main.stroke();
+      let s = 259199 - Math.floor((t - 25.5) * 3000); s = clamp(s, 0, 259199);
+      const p2 = n => (n < 10 ? '0' : '') + n;
+      T('ΛΗΓΕΙ ΣΕ  ' + p2(Math.floor(s/3600)) + ':' + p2(Math.floor((s%3600)/60)) + ':' + p2(s%60), 0, 0, 50, C.white);
+      main.restore();
+    }
+    main.restore();
+  }
+
+  // ===== ΣΚΗΝΗ 5
+  if (t >= 28) {
+    logo(t);
+    const e = t < 28.6 ? 0 : (t < 29.4 ? back(pr(t, 28.7, 29.4)) : 1);
+    if (e > 0) {
+      const s = e + (t > 29.6 ? .04 * beat(t) : 0);
+      main.save(); main.translate(540, 1400); main.scale(s, s);
+      glowOn(C.lime, 40); main.fillStyle = rgba(C.lime); rr(0, 0, 760, 140, 70); main.fill();
+      main.shadowBlur = 0;
+      T('ΠΑΡΕ ΤΟ ΤΩΡΑ', 0, 0, 60, [10,13,31]);
+      main.restore();
+    }
+    T('@pulse.x1   #PulseX1', 540, 1510, 36, C.grey, { reg: true, rev: [29.3, 30.0], yoff: 30 });
+    T('ΣΥΡΕ ΠΡΟΣ ΤΑ ΠΑΝΩ', 540, 1565, 36, C.white, { rev: [29.7, 30.5], yoff: 30 });
+    if (t >= 29.8) {
+      main.save(); main.globalAlpha = pr(t, 29.8, 30.2);
+      main.translate(540, 1615 - Math.abs(Math.sin(t*4)) * 18);
+      main.strokeStyle = rgba(C.lime); main.lineWidth = 10; main.lineCap = 'round'; main.lineJoin = 'round';
+      for (let i = 0; i < 2; i++) {
+        main.beginPath(); main.moveTo(-40, 18 + i*32); main.lineTo(0, -18 + i*32); main.lineTo(40, 18 + i*32); main.stroke();
+      }
+      main.restore();
+    }
+  }
+
+  // ===== ΒΙΝΙΕΤΑ
+  const v = main.createRadialGradient(540, 960, 350, 540, 960, 1250);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.65)');
+  main.fillStyle = v; main.fillRect(0, 0, W, H);
+
+  // ===== ΜΕΤΑΒΑΣΕΙΣ: θόλωμα + flash στα cuts
+  let blur = 0, fl = 0;
+  for (const c of [4, 12, 22, 28]) {
+    blur = Math.max(blur, kf(t, [[c-.15,0],[c,30],[c+.35,0]], lin));
+    fl = Math.max(fl, kf(t, [[c-.1,0],[c,.55],[c+.3,0]], lin));
+  }
+  if (blur > 1) {
+    tctx.setTransform(1,0,0,1,0,0); tctx.clearRect(0,0,W,H); tctx.drawImage(cv, 0, 0);
+    main.save(); main.fillStyle = rgba(C.bg); main.fillRect(0,0,W,H);
+    main.filter = `blur(${blur}px)`; main.drawImage(tc, 0, 0); main.restore();
+  }
+  if (fl > .01) { main.fillStyle = `rgba(255,255,255,${fl})`; main.fillRect(0, 0, W, H); }
+}
+window.render = render;
+window.fontsReady = document.fonts.load('bold 20px "Liberation Sans"').then(() => document.fonts.load('20px "Liberation Sans"'));
+</script></body></html>
