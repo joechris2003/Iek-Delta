@@ -27,7 +27,7 @@ fmat.use_nodes = True
 fb = fmat.node_tree.nodes["Principled BSDF"]
 fb.inputs["Base Color"].default_value = (0.01, 0.01, 0.012, 1)
 fb.inputs["Roughness"].default_value = 0.5
-fb.inputs["Specular IOR Level"].default_value = 0.15
+fb.inputs["Specular IOR Level"].default_value = 0.0
 floor.data.materials.append(fmat)
 
 # --- φόντο (καμπύλο backdrop) ---
@@ -41,6 +41,7 @@ bmat.use_nodes = True
 bb = bmat.node_tree.nodes["Principled BSDF"]
 bb.inputs["Base Color"].default_value = (0.01, 0.01, 0.012, 1)
 bb.inputs["Roughness"].default_value = 0.8
+bb.inputs["Specular IOR Level"].default_value = 0.0
 back.data.materials.append(bmat)
 
 # --- φώτα ---
