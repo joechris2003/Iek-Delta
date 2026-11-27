@@ -38,4 +38,4 @@
 - Το προϊόν και το brand είναι φανταστικά.
 
 ## Βίντεο προεπισκόπησης
-`PULSE_X1_Story_preview.mp4` (1080x1920, 30fps, 32s, με μουσική) είναι render από animation σε canvas (`preview/ad.html`, `node preview/render_video.js`). Ακολουθεί τις ίδιες σκηνές και χρόνους με το script του After Effects, αλλά δεν είναι render του After Effects.
+`PULSE_X1_Story_light.mp4` (ανοιχτή παλέτα, `node preview/render_video.js out.mp4 32 light`) και `PULSE_X1_Story_preview.mp4` (σκούρη)  (1080x1920, 30fps, 32s, με μουσική) είναι render από animation σε canvas (`preview/ad.html`, `node preview/render_video.js`). Ακολουθεί τις ίδιες σκηνές και χρόνους με το script του After Effects, αλλά δεν είναι render του After Effects.

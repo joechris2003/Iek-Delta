@@ -11,8 +11,17 @@ const W = 1080, H = 1920;
 const oc = document.createElement('canvas'); oc.width = W; oc.height = H; const octx = oc.getContext('2d');
 const tc = document.createElement('canvas'); tc.width = W; tc.height = H; const tctx = tc.getContext('2d');
 
-const C = { bg:[8,10,26], navy:[18,23,56], cyan:[26,217,255], mag:[255,46,140], lime:[184,255,56],
-            white:[255,255,255], card:[20,26,54], grey:[179,191,230] };
+const LIGHT = /light/.test(location.search);
+const C = LIGHT
+  ? { bg:[246,248,255], navy:[214,228,255], cyan:[0,140,225], mag:[255,64,112], lime:[16,170,110],
+      white:[18,28,66], card:[255,255,255], grey:[92,106,150] }
+  : { bg:[8,10,26], navy:[18,23,56], cyan:[26,217,255], mag:[255,46,140], lime:[184,255,56],
+      white:[255,255,255], card:[20,26,54], grey:[179,191,230] };
+const SCR = [255,255,255];                       // κείμενο μέσα στην οθόνη του ρολογιού
+const TITLE = LIGHT ? [20,56,150] : [209,242,255];
+const BTNTXT = LIGHT ? [255,255,255] : [10,13,31];
+const TOPS = LIGHT ? [[0,C.navy],[4,[228,222,255]],[12,C.navy],[22,[255,222,232]],[26,[212,236,255]]]
+                   : [[0,C.navy],[4,[26,18,71]],[12,C.navy],[22,[77,10,56]],[26,[20,26,77]]];
 const rgba = (c, a = 1) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${a})`;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const pr = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
@@ -149,8 +158,8 @@ function drawWatch(t) {
     ctx.save(); glowOn(C.mag, 25); ctx.strokeStyle = rgba(C.mag); ctx.lineCap = 'round';
     ctx.beginPath(); ctx.arc(0, 20, 120, -Math.PI/2, -Math.PI/2 + Math.PI*2*.82*pg); ctx.stroke(); ctx.restore();
   }
-  T(Math.round(82 * pg) + '%', 0, 20, 76, C.white);
-  T('10:09', 0, -150, 84, C.white);
+  T(Math.round(82 * pg) + '%', 0, 20, 76, SCR);
+  T('10:09', 0, -150, 84, SCR);
   T('BPM ' + Math.round(72 + 4*Math.sin(t*2*Math.PI*1.2)), 0, 185, 34, C.mag, { a: .75 + .25*beat(t) });
   if (t >= 5.5) {
     const gx = -400 + 800 * (((t - 5.5) % 1.5) / 1.5);
@@ -223,22 +232,22 @@ function render(t) {
   main.setTransform(1,0,0,1,0,0); main.globalAlpha = 1; main.globalCompositeOperation = 'source-over';
   main.filter = 'none'; main.shadowBlur = 0; main.setLineDash([]);
   // φόντο
-  const top = kf(t, [[0,C.navy],[4,[26,18,71]],[12,C.navy],[22,[77,10,56]],[26,[20,26,77]]]);
+  const top = kf(t, TOPS);
   const g = main.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, rgba(top)); g.addColorStop(1, rgba(C.bg));
   main.fillStyle = g; main.fillRect(0, 0, W, H);
   // κινούμενο πλέγμα
-  main.save(); main.globalAlpha = .07; main.fillStyle = '#fff';
+  main.save(); main.globalAlpha = LIGHT ? .06 : .07; main.fillStyle = rgba(C.white);
   const gx = (t*30) % 80, gy = (t*50) % 80;
   for (let x = -80; x < W + 80; x += 80) main.fillRect(x + gx, 0, 2, H);
   for (let y = -80; y < H + 80; y += 80) main.fillRect(0, y + gy, W, 2);
   main.restore();
   // σωματίδια
-  main.save(); main.globalCompositeOperation = 'lighter';
+  main.save(); main.globalCompositeOperation = LIGHT ? 'source-over' : 'lighter';
   for (const p of parts) {
     const y = (((p.y0 - t*p.sp) % 2100) + 2100) % 2100 - 100;
     const x = p.x + Math.sin(t*p.f + p.ph) * p.amp;
-    main.globalAlpha = p.a * .85; main.shadowColor = rgba(p.col); main.shadowBlur = 20;
+    main.globalAlpha = p.a * (LIGHT ? .6 : .85); main.shadowColor = rgba(p.col); main.shadowBlur = LIGHT ? 8 : 20;
     main.fillStyle = rgba(p.col); main.beginPath(); main.arc(x, y, p.sz/2, 0, 7); main.fill();
   }
   main.restore();
@@ -282,7 +291,7 @@ function render(t) {
     const fo = 1 - pr(t, 11.7, 12.2);
     main.save(); main.globalAlpha = fo;
     ctx = main;
-    T('PULSE X1', 540, 330, 150, [209,242,255], { rev: [4.5, 5.6], yoff: 90, glow: 30 });
+    T('PULSE X1', 540, 330, 150, TITLE, { rev: [4.5, 5.6], yoff: 90, glow: LIGHT ? 0 : 30 });
     // λάμψη μέσα στα γράμματα
     for (const [a, b] of [[6.0, 6.9],[8.6, 9.5]]) {
       if (t < a || t > b) continue;
@@ -317,7 +326,7 @@ function render(t) {
     if (t >= 22.9) {
       main.save(); main.translate(540, 620); main.scale(ps, ps);
       const v = Math.round(30 * ease(pr(t, 23.0, 24.4)));
-      T('-' + v + '%', 0, 0, 300, C.white, { glow: 40 }); main.restore();
+      T('-' + v + '%', 0, 0, 300, C.white, { glow: 40, glowCol: C.mag }); main.restore();
     }
     if (t >= 24) {
       T('€299', 540, 830, 80, C.grey, { a: pr(t, 24.0, 24.5) });
@@ -353,7 +362,7 @@ function render(t) {
       main.save(); main.translate(540, 1400); main.scale(s, s);
       glowOn(C.lime, 40); main.fillStyle = rgba(C.lime); rr(0, 0, 760, 140, 70); main.fill();
       main.shadowBlur = 0;
-      T('ΠΑΡΕ ΤΟ ΤΩΡΑ', 0, 0, 60, [10,13,31]);
+      T('ΠΑΡΕ ΤΟ ΤΩΡΑ', 0, 0, 60, BTNTXT);
       main.restore();
     }
     T('@pulse.x1   #PulseX1', 540, 1510, 36, C.grey, { reg: true, rev: [29.3, 30.0], yoff: 30 });
@@ -371,7 +380,7 @@ function render(t) {
 
   // ===== ΒΙΝΙΕΤΑ
   const v = main.createRadialGradient(540, 960, 350, 540, 960, 1250);
-  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.65)');
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, LIGHT ? 'rgba(150,170,225,.16)' : 'rgba(0,0,0,.65)');
   main.fillStyle = v; main.fillRect(0, 0, W, H);
 
   // ===== ΜΕΤΑΒΑΣΕΙΣ: θόλωμα + flash στα cuts

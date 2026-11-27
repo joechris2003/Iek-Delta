@@ -1,11 +1,12 @@
 // Γράφει το preview σε mp4 (1080x1920, 30fps, 32s) με Playwright + ffmpeg.
-// Χρήση: node render_video.js [έξοδος.mp4] [μέγιστος χρόνος σε δευτερόλεπτα]
+// Χρήση: node render_video.js [έξοδος.mp4] [μέγιστος χρόνος σε δευτερόλεπτα] [light]
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
 const path = require('path');
 
 const out = path.resolve(process.argv[2] || 'PULSE_X1_Story_preview.mp4');
 const limit = parseFloat(process.argv[3] || '32');
+const theme = process.argv[4] === 'light' ? '?light' : '';
 const FPS = 30;
 const audio = path.resolve(__dirname, '../assets/pulse_soundtrack.wav');
 
@@ -13,7 +14,7 @@ const audio = path.resolve(__dirname, '../assets/pulse_soundtrack.wav');
   const browser = await chromium.launch({ args: ['--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1080, height: 1920 } });
   page.on('pageerror', e => console.error('PAGE ERROR', e.message));
-  await page.goto('file://' + path.resolve(__dirname, 'ad.html'));
+  await page.goto('file://' + path.resolve(__dirname, 'ad.html') + theme);
   await page.evaluate(() => window.fontsReady);
 
   const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error',
